@@ -110,7 +110,7 @@ def compute_density(pc, tree, PPEexec, radius=0.2, precise=False, k=20):
     :param tree: a nearest neighbors tree for all the points
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
     :param radius: the radius in which to search for nearest neighbors
-    :param precise: indicates whether density is reported as number of neighbors (True), or as a rougher approximation (False)
+    :param precise: indicates whether density is reported as number of neighbors (True), or as a rougher distance based approximation (False)
     :param k: the max number of nearest neighbors to query
     :return: a list of density values with the same length as the number of points
     """
