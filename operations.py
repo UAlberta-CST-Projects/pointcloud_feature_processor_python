@@ -27,6 +27,8 @@ def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
     :param k: the max number of nearest neighbors to query
     :return: a list of slopes with the same length as the number of points
     """
+    print("Beginning gradient work")
+    # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
     # for each point get the related nearest neighbors and compute gradient
     print("determining arg lists...")
@@ -75,7 +77,8 @@ def compute_roughness(pc, tree, PPEexec, radius=0.2, k=20):
     :param k: the max number of nearest neighbors to query
     :return: a list of roughness values with the same length as the number of points
     """
-    # build nearest neighbor tree
+    print("Beginning roughness work")
+    # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
     print("determining arg lists...")
     pt_groups = []
@@ -83,8 +86,8 @@ def compute_roughness(pc, tree, PPEexec, radius=0.2, k=20):
     pt_idx = 0
     for knn in nn:
         knn = knn[knn != tree.n]
-        pt_groups.append(pc.iloc[knn].to_numpy())
-        pt_list.append(pc.iloc[pt_idx].to_numpy())
+        pt_groups.append(knn)
+        pt_list.append(pt_idx)
         pt_idx += 1
     print(f"finished creating args, computing roughness for {len(nn)} points")
     roughnesses = list(tqdm(PPEexec.map(_compute_rough, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
@@ -95,11 +98,11 @@ def _compute_rough(pts, current_pt):
     if len(pts) < 4:
         return np.nan
     # get the plane of best fit as a point and normal vector
-    pt, normal = planeFit(pts)
+    pt, normal = planeFit(data[pts])
     normal = normal / norm(normal)  # normalize the vector
-    plane_to_point = current_pt - pt
+    plane_to_point = data[current_pt] - pt
     dist_to_plane = np.dot(normal, plane_to_point) * normal  # project plane to point vector onto plane normal
-    dist_to_plane = norm(dist_to_plane)
+    #dist_to_plane = norm(dist_to_plane)
     return dist_to_plane
 
 
@@ -114,10 +117,12 @@ def compute_density(pc, tree, PPEexec, radius=0.2, precise=False, k=20):
     :param k: the max number of nearest neighbors to query
     :return: a list of density values with the same length as the number of points
     """
+    print("Beginning density work")
+    # query tree for nearest neighbors
     if precise:
-        dd, nn = tree.query(pc.xyz, distance_upper_bound=radius, k=k, workers=-1)
+        dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
     else:
-        dd, nn = tree.query(pc.xyz, distance_upper_bound=radius, k=2, workers=-1)
+        dd, nn = tree.query(pc, distance_upper_bound=radius, k=2, workers=-1)
     print("determining arg lists...")
     pt_groups = []
     dd_groups = []

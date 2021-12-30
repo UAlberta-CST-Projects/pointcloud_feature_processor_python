@@ -39,10 +39,11 @@ def main():
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
     sharr[:] = pc_as_np[:]
     sharr.flags.writeable = False
-    # build nearest neighbor tree
-    tree = cKDTree(pc.xyz, balanced_tree=False, compact_nodes=False)
     # retrieve xyz once
     pts = points.xyz
+    # build nearest neighbor tree
+    print("Building KDtree...")
+    tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
     with ProcessPoolExecutor(max_workers=cpu_count(), initializer=init_pool,
                              initargs=(shm.name, sharr.shape, sharr.dtype)) as executor:
@@ -80,10 +81,11 @@ def cli_main(opt):
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
     sharr[:] = pc_as_np[:]
     sharr.flags.writeable = False
-    # build nearest neighbor tree
-    tree = cKDTree(pc.xyz, balanced_tree=False, compact_nodes=False)
     # retrieve xyz once
     pts = points.xyz
+    # build nearest neighbor tree
+    print("Building KDtree...")
+    tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
     with ProcessPoolExecutor(max_workers=cpu_count(), initializer=init_pool,
                              initargs=(shm.name, sharr.shape, sharr.dtype)) as executor:
@@ -99,7 +101,7 @@ def cli_main(opt):
     shm.unlink()
     points.add_fields(**results)
     points.to_las(f"{filepath[:-4]}-processed.las")
-    print(f"Finished! Time taken: {time() - tstart}s")
+    print(f"Finished! Time taken: {round(time() - tstart, 3)}s")
 
 
 def check_args(opt):
