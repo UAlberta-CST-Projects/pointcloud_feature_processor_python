@@ -1,5 +1,4 @@
 from math import sqrt
-from scipy.spatial import cKDTree
 from numpy.linalg import norm
 import numpy as np
 from util import planeFit
@@ -9,11 +8,18 @@ from tqdm import tqdm
 
 
 def init_pool(sha_mem_name, shape, sh_dtype):
+    """
+    Runs at the start of every worker process spawned by ProcessPoolExecutor.
+    Provides the worker access to the pointcloud data via shared memory.
+    :param sha_mem_name: The name of a created SharedMemory buffer, used to attach to it.
+    :param shape: The shape of the numpy ndarray containing the point data.
+    :param sh_dtype: The dtype of the numpy ndarray containing the point data.
+    :return: None
+    """
     global data
     global shm  # fun fact: if this isn't global the entire memory block offs itself, I'd like my day back please.
     shm = shared_memory.SharedMemory(name=sha_mem_name)
     data = np.ndarray(shape, dtype=sh_dtype, buffer=shm.buf)
-    #print(data)
 
 
 def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
@@ -42,9 +48,16 @@ def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
 
 
 def _compute_grad(pts, gfield):
+    """
+    Helper function that computes the gradient of a single point. Built to work with the map function.
+    This function finds the slope around a point by fitting a plane to the surrounding points.
+    From this, a point and normal vector that define the plane are determined and used to calculate slope.
+    :param pts: The indices of the points within the specified radius of the current point.
+    :param gfield: x, y, or z, determines on which plane gradient is computed for.
+    :return: The slope value of the given area determined by the given points (the gradient).
+    """
     if len(pts) < 4:
         return np.nan
-    # get the points as a numpy array
     # get the best fit plane as a point and normal vector
     pt, normal = planeFit(data[pts])
     normal = normal / norm(normal)  # normalize the vector
@@ -95,6 +108,14 @@ def compute_roughness(pc, tree, PPEexec, radius=0.2, k=20):
 
 
 def _compute_rough(pts, current_pt):
+    """
+    Helper function that computes the roughness of single point. Built to work with the map function.
+    This function determines 'roughness' of a point by calculating how far the point is from the plane
+    of best fit of the surrounding points.
+    :param pts: The indices of the points within the specified radius of the current point.
+    :param current_pt: The point that roughness is currently being calculated for.
+    :return: The distance from the current point to the plane of best fit (the roughness).
+    """
     if len(pts) < 4:
         return np.nan
     # get the plane of best fit as a point and normal vector
@@ -138,6 +159,18 @@ def compute_density(pc, tree, PPEexec, radius=0.2, precise=False, k=20):
 
 
 def _compute_den(pts, dd, radius, precise):
+    """
+    Helper function that computes the density of single point. Built to work with the map function.
+    This function determines the density surrounding a point by either counting the number of neighbouring points
+    within the specified radius, or by using the distance to the nearest point as an inverse estimation of the density.
+    :param pts: The indices of the points within the specified radius of the current point. The length of this list
+    is the only real information necessary.
+    :param dd: A list of the distances to the nearest neighbors which align with those in pts.
+    :param radius: The radius that was specified to be considered for density.
+    :param precise: Indicates whether density is reported as number of neighbors (True),
+    or as a rougher distance based approximation (False).
+    :return: The density of the current point as either the number of nearest neighbors or a distance approximation.
+    """
     if len(pts) <= 0:
         return np.nan
     if precise:
