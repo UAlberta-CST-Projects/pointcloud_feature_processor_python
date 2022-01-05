@@ -2,6 +2,8 @@ Requirements:
 Either use the included env file to recreate the conda env, or just install the packages listed in the pip section of the yaml file.
 Also python must be at least version 3.8
 
+Note: You need to run the program from the conda env mentioned above, this can be done either from the command line via conda or through you ide if supported
+
 Usages:
 1. You can simply run the compute_features.py file and it will guide you through the process.
 
