@@ -1,4 +1,4 @@
-from operations import compute_gradient, compute_roughness, compute_density, init_pool
+from operations import compute_gradient, compute_roughness, compute_density, compute_max_local_height_difference, init_pool
 from util import pointcloud as pc
 from os import path
 import argparse
@@ -22,12 +22,12 @@ def main():
         print("Invalid file selected.")
         return
     filepath = path.abspath(filepath)
-    menu_blurb = ["Options:", "[0] gradient", "[1] roughness", "[2] density",
+    menu_blurb = ["Options:", "[0] gradient", "[1] roughness", "[2] density", "[3] z_diff",
                   "Which features would you like to compute(e.g. 0 2)? "]
     choice = input('\n'.join(menu_blurb))
     clist = [int(c) for c in choice.split()]
     for c in clist:
-        if c not in {0, 1, 2}:
+        if c not in {0, 1, 2, 3}:
             print("Invalid selection.")
             return
     results = {}
@@ -55,6 +55,8 @@ def main():
                 results["roughness"] = compute_roughness(pts, tree, executor, radius=0.2)
             elif c == 2:
                 results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
+            elif c == 3:
+                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.2)
     # cleanup shared memory block
     shm.close()
     shm.unlink()
@@ -96,6 +98,8 @@ def cli_main(opt):
             results["roughness"] = compute_roughness(pts, tree, executor, radius=opt.rradius)
         if opt.density:
             results["density"] = compute_density(pts, tree, executor, radius=opt.dradius, precise=(not opt.unprecise))
+        if opt.zdiff:
+            results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=opt.diffradius)
     # cleanup shared memory block
     shm.close()
     shm.unlink()
@@ -105,7 +109,7 @@ def cli_main(opt):
 
 
 def check_args(opt):
-    if not opt.gradient and not opt.roughness and not opt.density:
+    if not opt.gradient and not opt.roughness and not opt.density and not opt.zdiff:
         print("At least one operation needs to be specified.")
         return False
     if opt.gradient and opt.gfield is None:
@@ -116,6 +120,9 @@ def check_args(opt):
         return False
     if opt.density and opt.dradius is None:
         print("density requires dradius to be specified.")
+        return False
+    if opt.zdiff and opt.diffradius is None:
+        print("zdiff requires diffradius to be specified.")
         return False
     return True
 
@@ -134,9 +141,11 @@ if __name__ == "__main__":
     parser.add_argument("--density", action="store_true")
     parser.add_argument("--dradius", type=float)
     parser.add_argument("--unprecise", action="store_true")
+    parser.add_argument("--zdiff", action="store_true")
+    parser.add_argument("--diffradius", type=float)
 
     opt = parser.parse_args()
-    if opt.gradient or opt.roughness or opt.density or opt.file is not None:
+    if opt.gradient or opt.roughness or opt.density or opt.zdiff or opt.file is not None:
         if not check_args(opt):
             exit()
         cli_main(opt)

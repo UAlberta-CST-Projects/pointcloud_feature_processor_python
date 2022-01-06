@@ -185,3 +185,28 @@ def _compute_den(pts, dd, radius, precise):
                 return 1 - (dd[0] / radius)
         else:
             return 1 - (dd[1] / radius)
+
+
+def compute_max_local_height_difference(pc, tree, PPEexec, radius=0.2, k=20):
+    print("Beginning height diff work")
+    # query tree for nearest neighbors
+    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    # for each point get the related nearest neighbors and compute gradient
+    print("determining arg lists...")
+    pt_groups = []
+    for knn in nn:
+        knn = knn[knn != tree.n]
+        pt_groups.append(knn)
+    print(f"finished creating args, computing gradient for {len(nn)} points")
+    diffs = list(tqdm(PPEexec.map(_compute_height_diff, pt_groups, chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
+    return diffs
+
+
+def _compute_height_diff(pts):
+    if len(pts) < 2:
+        return np.nan
+    heights = data[pts]
+    heights = heights[:, 2]
+    hmax = np.max(heights)
+    hmin = np.min(heights)
+    return abs(hmax - hmin) * 100  # return diff in cm, assuming coords are in m
