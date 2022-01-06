@@ -36,13 +36,13 @@ def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
     print("Beginning gradient work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    # for each point get the related nearest neighbors and compute gradient
     print("determining arg lists...")
     pt_groups = []
     for knn in nn:
         knn = knn[knn != tree.n]
         pt_groups.append(knn)
     print(f"finished creating args, computing gradient for {len(nn)} points")
+    # for each point get the related nearest neighbors and compute gradient
     slopes = list(tqdm(PPEexec.map(_compute_grad, pt_groups, repeat(gfield), chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
     return slopes
 
@@ -188,21 +188,36 @@ def _compute_den(pts, dd, radius, precise):
 
 
 def compute_max_local_height_difference(pc, tree, PPEexec, radius=0.2, k=20):
+    """
+    given a 3d point cloud compute the max height difference between the points around every point
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of height difference values with the same length as the number of points
+    """
     print("Beginning height diff work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    # for each point get the related nearest neighbors and compute gradient
     print("determining arg lists...")
     pt_groups = []
     for knn in nn:
         knn = knn[knn != tree.n]
         pt_groups.append(knn)
-    print(f"finished creating args, computing gradient for {len(nn)} points")
+    print(f"finished creating args, computing height diff for {len(nn)} points")
     diffs = list(tqdm(PPEexec.map(_compute_height_diff, pt_groups, chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
     return diffs
 
 
 def _compute_height_diff(pts):
+    """
+    Helper function that computes the height difference around a single point. Built to work with the map function.
+    This function determines the max z difference in an area around a point by getting the difference between
+    the min and max z coordinates from the list of points passed.
+    :param pts: a list of indices for points in the data matrix
+    :return: the max height difference found in pts as a centimeter measurement
+    """
     if len(pts) < 2:
         return np.nan
     heights = data[pts]
