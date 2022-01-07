@@ -22,8 +22,9 @@ def main():
         print("Invalid file selected.")
         return
     filepath = path.abspath(filepath)
-    menu_blurb = ["Options:", "[0] gradient", "[1] roughness", "[2] density", "[3] z_diff",
-                  "Which features would you like to compute(e.g. 0 2)? "]
+    menu_blurb = ["Options:", "[0] z_gradient", "[1] roughness", "[2] density", "[3] z_diff",
+                  "Which features would you like to compute?",
+                  "Multiple options can be selected if you separate them with spaces. (e.g. 0 3)", ""]
     choice = input('\n'.join(menu_blurb))
     clist = [int(c) for c in choice.split()]
     for c in clist:
