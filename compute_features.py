@@ -51,13 +51,13 @@ def main():
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
         for c in clist:
             if c == 0:
-                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z')
+                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=0.25)
             elif c == 1:
-                results["roughness"] = compute_roughness(pts, tree, executor, radius=0.2)
+                results["roughness"] = compute_roughness(pts, tree, executor, radius=0.05)
             elif c == 2:
                 results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
             elif c == 3:
-                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.2)
+                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.04)
     # cleanup shared memory block
     shm.close()
     shm.unlink()

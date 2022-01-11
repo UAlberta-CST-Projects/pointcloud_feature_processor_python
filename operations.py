@@ -56,7 +56,7 @@ def _compute_grad(pts, gfield):
     :param gfield: x, y, or z, determines on which plane gradient is computed for.
     :return: The slope value of the given area determined by the given points (the gradient).
     """
-    if len(pts) < 4:
+    if len(pts) < 3:
         return np.nan
     # get the best fit plane as a point and normal vector
     pt, normal = planeFit(data[pts])
@@ -123,7 +123,7 @@ def _compute_rough(pts, current_pt):
     normal = normal / norm(normal)  # normalize the vector
     plane_to_point = data[current_pt] - pt
     dist_to_plane = np.dot(normal, plane_to_point) * normal  # project plane to point vector onto plane normal
-    #dist_to_plane = norm(dist_to_plane)
+    dist_to_plane = norm(dist_to_plane)
     return dist_to_plane
 
 
