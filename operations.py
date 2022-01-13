@@ -116,7 +116,7 @@ def _compute_rough(pts, current_pt):
     :param current_pt: The point that roughness is currently being calculated for.
     :return: The distance from the current point to the plane of best fit (the roughness).
     """
-    if len(pts) < 4:
+    if len(pts) < 3:
         return np.nan
     # get the plane of best fit as a point and normal vector
     pt, normal = planeFit(data[pts])
@@ -216,7 +216,7 @@ def _compute_height_diff(pts):
     This function determines the max z difference in an area around a point by getting the difference between
     the min and max z coordinates from the list of points passed.
     :param pts: a list of indices for points in the data matrix
-    :return: the max height difference found in pts as a centimeter measurement
+    :return: the max height difference found in pts as a foot measurement
     """
     if len(pts) < 2:
         return np.nan
@@ -224,4 +224,4 @@ def _compute_height_diff(pts):
     heights = heights[:, 2]
     hmax = np.max(heights)
     hmin = np.min(heights)
-    return abs(hmax - hmin) * 100  # return diff in cm, assuming coords are in m
+    return abs(hmax - hmin)
