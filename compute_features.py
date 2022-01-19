@@ -36,10 +36,6 @@ def main():
     # setup shared memory space so all processes can access the point data for processing
     points, header = pc.from_las(filepath)
     pc_as_np = points.xyz.to_numpy()
-    pc_as_np[:, 0] -= header.offsets[0]
-    pc_as_np[:, 1] -= header.offsets[1]
-    pc_as_np[:, 2] -= header.offsets[2]
-    pc_as_np = pc_as_np.astype('float32')
     shm = shared_memory.SharedMemory(create=True, size=pc_as_np.nbytes)
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
     sharr[:] = pc_as_np[:]
@@ -50,7 +46,7 @@ def main():
     print("Building KDtree...")
     tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
-    with ProcessPoolExecutor(max_workers=cpu_count(), initializer=init_pool,
+    with ProcessPoolExecutor(max_workers=cpu_count()//2, initializer=init_pool,
                              initargs=(shm.name, sharr.shape, sharr.dtype)) as executor:
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
         for c in clist:
