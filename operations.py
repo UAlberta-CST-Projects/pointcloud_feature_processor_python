@@ -36,6 +36,7 @@ def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
     print("Beginning gradient work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
     print("determining arg lists...")
     pt_groups = []
     for knn in nn:
@@ -93,6 +94,7 @@ def compute_roughness(pc, tree, PPEexec, radius=0.2, k=20):
     print("Beginning roughness work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
     print("determining arg lists...")
     pt_groups = []
     pt_list = []
@@ -144,6 +146,7 @@ def compute_density(pc, tree, PPEexec, radius=0.2, precise=False, k=20):
         dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
     else:
         dd, nn = tree.query(pc, distance_upper_bound=radius, k=2, workers=-1)
+    nn = nn.astype('int32')
     print("determining arg lists...")
     pt_groups = []
     dd_groups = []
@@ -200,6 +203,7 @@ def compute_max_local_height_difference(pc, tree, PPEexec, radius=0.2, k=20):
     print("Beginning height diff work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
     print("determining arg lists...")
     pt_groups = []
     for knn in nn:

@@ -34,7 +34,7 @@ def main():
     results = {}
     tstart = time()
     # setup shared memory space so all processes can access the point data for processing
-    points = pc.from_las(filepath)
+    points, header = pc.from_las(filepath)
     pc_as_np = points.xyz.to_numpy()
     shm = shared_memory.SharedMemory(create=True, size=pc_as_np.nbytes)
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
@@ -46,18 +46,18 @@ def main():
     print("Building KDtree...")
     tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
-    with ProcessPoolExecutor(max_workers=cpu_count(), initializer=init_pool,
+    with ProcessPoolExecutor(max_workers=cpu_count()//2, initializer=init_pool,
                              initargs=(shm.name, sharr.shape, sharr.dtype)) as executor:
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
         for c in clist:
             if c == 0:
-                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=0.3)
+                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=0.5)
             elif c == 1:
-                results["roughness"] = compute_roughness(pts, tree, executor, radius=0.3)
+                results["roughness"] = compute_roughness(pts, tree, executor, radius=0.5)
             elif c == 2:
                 results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
             elif c == 3:
-                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.3)
+                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.5)
     # cleanup shared memory block
     shm.close()
     shm.unlink()
