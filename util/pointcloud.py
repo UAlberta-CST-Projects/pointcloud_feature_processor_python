@@ -77,7 +77,7 @@ class PointCloud:
     def from_las(cls, filename: str):
         las = pylas.read(filename)
         fields = [f for f in las.points_data.dimensions_names if f not in ['X', 'Y', 'Z', ]] + ['x', 'y', 'z']
-        return cls(pd.DataFrame({field: getattr(las, field) for field in fields}))
+        return cls(pd.DataFrame({field: getattr(las, field) for field in fields})), las.header
 
     @classmethod
     def from_dir(cls, dirname: str, file_type='hdf5', **kwargs):
