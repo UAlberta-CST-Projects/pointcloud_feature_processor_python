@@ -58,6 +58,8 @@ def main():
                 results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
             elif c == 3:
                 results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.5)
+            elif c == 4:
+                results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
     # cleanup shared memory block
     shm.close()
     shm.unlink()

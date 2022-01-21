@@ -229,3 +229,55 @@ def _compute_height_diff(pts):
     hmax = np.max(heights)
     hmin = np.min(heights)
     return abs(hmax - hmin)
+
+
+def compute_verticality(pc, tree, PPEexec, radius=0.2, k=20):
+    """
+    given a 3d point cloud compute the verticality of each point
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of verticality values with the same length as the number of points
+    """
+    print("Beginning verticality work")
+    # query tree for nearest neighbors
+    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
+    print("determining arg lists...")
+    pt_groups = []
+    pt_list = []
+    pt_idx = 0
+    for knn in nn:
+        knn = knn[knn != tree.n]
+        pt_groups.append(knn)
+        pt_list.append(pt_idx)
+        pt_idx += 1
+    print(f"finished creating args, computing verticality for {len(nn)} points")
+    verticality = list(tqdm(PPEexec.map(_compute_vert, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()),
+                            total=len(pt_list)))
+    return verticality
+
+
+def _compute_vert(pts):
+    '''
+    Helper function that computes the verticality of a single point. Built to work with the map function.
+    This function determines the verticality of a point by finding the normal of the plane created by the
+    surrounding points, then finding the angle between this normal and the positive z-axis (0, 0, 1). Then the angle is
+    divided by pi/2 to get a ratio between this normal and the z-axis.
+    :param pts: a list of indices for points in the data matrix
+    :return: the verticality of the point
+    '''
+    if len(pts) < 3:
+        return np.nan
+    # get the plane of best fit as a point and normal vector
+    pt, normal = planeFit(data[pts])
+    normal = normal / norm(normal)  # normalize the vector
+    if normal[2] < 0:
+        normal[2] = normal[2]*(-1)
+    # angle = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
+    # xb, yb, zb = (0, 0, 1)
+    angle = np.arccos(normal[2]/(np.sqrt(np.square(normal[0]) + np.square(normal[1]) + np.square(normal[2])))) # in radians
+    vert = angle/(np.pi/2)
+    return vert
