@@ -1,4 +1,4 @@
-from operations import compute_gradient, compute_roughness, compute_density, compute_max_local_height_difference, init_pool
+from operations import compute_gradient, compute_roughness, compute_density, compute_max_local_height_difference, init_pool, compute_verticality, compute_geometric
 from util import pointcloud as pc
 from os import path
 import argparse
@@ -22,13 +22,26 @@ def main():
         print("Invalid file selected.")
         return
     filepath = path.abspath(filepath)
-    menu_blurb = ["Options:", "[0] z_gradient", "[1] roughness", "[2] density", "[3] z_diff",
-                  "Which features would you like to compute?",
-                  "Multiple options can be selected if you separate them with spaces. (e.g. 0 3)", ""]
+
+    fchoice = input("Do you want to see regular[0] or eigen[1] features?")
+    if fchoice == 0:
+        options = {0,1,2,3,4}
+        menu_blurb = ["Options:", "[0] z_gradient", "[1] roughness", "[2] density", "[3] z_diff", "[4] verticality",
+                      "Which features would you like to compute?",
+                      "Multiple options can be selected if you separate them with spaces. (e.g. 0 3)", ""]
+    elif fchoice == 1:
+        options = {0, 1, 2, 3, 4, 5, 6, 7, 8}
+        menu_blurb = ["Options:", "[0] Sum", "[1] Omnivariance", "[2] Eigenentropy", "[3] Anisotropy",
+                      "[4] Planarity", "[5] Linearity", "[6] Surface Variation", "[7] Sphericity", "[8] Verticality",
+                      "Which features would you like to compute?",
+                      "Multiple options can be selected if you separate them with spaces. (e.g. 0 3)", ""]
+    else:
+        print("Invalid selection.")
+        return
     choice = input('\n'.join(menu_blurb))
     clist = [int(c) for c in choice.split()]
     for c in clist:
-        if c not in {0, 1, 2, 3}:
+        if c not in options:
             print("Invalid selection.")
             return
     results = {}
@@ -47,19 +60,22 @@ def main():
     tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
     with ProcessPoolExecutor(max_workers=cpu_count()//2, initializer=init_pool,
-                             initargs=(shm.name, sharr.shape, sharr.dtype)) as executor:
+                             initargs=(shm.name, sharr.shape, sharr.dtype, clist)) as executor:
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
-        for c in clist:
-            if c == 0:
-                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=0.5)
-            elif c == 1:
-                results["roughness"] = compute_roughness(pts, tree, executor, radius=0.5)
-            elif c == 2:
-                results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
-            elif c == 3:
-                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.5)
-            elif c == 4:
-                results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
+        if fchoice == 0:
+            for c in clist:
+                if c == 0:
+                    results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=0.5)
+                elif c == 1:
+                    results["roughness"] = compute_roughness(pts, tree, executor, radius=0.5)
+                elif c == 2:
+                    results["density"] = compute_density(pts, tree, executor, radius=0.2, precise=True)
+                elif c == 3:
+                    results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.5)
+                elif c == 4:
+                    results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
+        else:
+            results = compute_geometric(pts, tree, executor, radius=0.5)
     # cleanup shared memory block
     shm.close()
     shm.unlink()
