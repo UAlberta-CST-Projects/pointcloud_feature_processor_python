@@ -23,7 +23,11 @@ def main():
         return
     filepath = path.abspath(filepath)
 
-    fchoice = input("Do you want to see regular[0] or eigen[1] features?")
+    try:
+        fchoice = int(input("Do you want to see regular[0] or eigen[1] features?"))
+    except ValueError:
+        print("Invalid selection.")
+        return
     if fchoice == 0:
         options = {0,1,2,3,4}
         menu_blurb = ["Options:", "[0] z_gradient", "[1] roughness", "[2] density", "[3] z_diff", "[4] verticality",
@@ -49,6 +53,9 @@ def main():
     # setup shared memory space so all processes can access the point data for processing
     points, header = pc.from_las(filepath)
     pc_as_np = points.xyz.to_numpy()
+    # pc_as_np[:, 0] -= header.offsets[0]
+    # pc_as_np[:, 1] -= header.offsets[1]
+    # pc_as_np[:, 2] -= header.offsets[2]
     shm = shared_memory.SharedMemory(create=True, size=pc_as_np.nbytes)
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
     sharr[:] = pc_as_np[:]
@@ -59,7 +66,7 @@ def main():
     print("Building KDtree...")
     tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
     # create process manager
-    with ProcessPoolExecutor(max_workers=cpu_count()//2, initializer=init_pool,
+    with ProcessPoolExecutor(max_workers=min(cpu_count()//2, 6), initializer=init_pool,
                              initargs=(shm.name, sharr.shape, sharr.dtype, clist)) as executor:
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
         if fchoice == 0:
@@ -75,7 +82,7 @@ def main():
                 elif c == 4:
                     results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
         else:
-            results = compute_geometric(pts, tree, executor, radius=0.5)
+            results = compute_geometric(pts, tree, executor, clist, radius=0.5)
     # cleanup shared memory block
     shm.close()
     shm.unlink()

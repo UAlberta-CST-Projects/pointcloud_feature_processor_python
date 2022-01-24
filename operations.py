@@ -5,6 +5,10 @@ from util import planeFit
 from multiprocessing import cpu_count, shared_memory
 from itertools import repeat
 from tqdm import tqdm
+import warnings
+
+np.seterr(all='warn')
+warnings.filterwarnings('error')
 
 
 def init_pool(sha_mem_name, shape, sh_dtype, sel_features):
@@ -285,8 +289,8 @@ def _compute_vert(pts):
     return vert
 
 
-def compute_geometric(pc, tree, PPEexec, radius=0.2, k=20):
-    print("Beginning height diff work")
+def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
+    print("Beginning feature work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
     nn = nn.astype('int32')
@@ -300,13 +304,13 @@ def compute_geometric(pc, tree, PPEexec, radius=0.2, k=20):
                       total=len(pt_groups))))
     names = {0: "sum", 1: "omnivariance", 2: "eigenentropy", 3: "anisotropy", 4: "planarity", 5: "linearity", 6: "surface_variation", 7: "sphericity", 8: "verticality"}
     results = {}
-    for i in range(len(selected_features)):
-        results[names[i]] = results_arr[:, i]
+    for i in range(len(sf)):
+        results[names[sf[i]]] = results_arr[:, i]
     return results
 
 
 def _compute_geo(pts):
-    if len(pts) < 3:
+    if len(pts) < 4:  # the covariance matrix doesn't work if len(pts) < 3 where 3 represents the number of dimensions
         return np.full(len(selected_features), np.nan)
     # compute covariance matrix
     cov_tensor = np.cov(data[pts], rowvar=False, bias=True)
@@ -315,7 +319,8 @@ def _compute_geo(pts):
     assert len(eigvals) == 3 and len(eigvects) == 3, "eigen values or vectors not as expected"
     eigvects = np.array([ev for _, ev in sorted(zip(eigvals, eigvects), key=lambda pair: pair[0], reverse=True)])
     eigvals.sort()
-    np.flip(eigvals)
+    eigvals = np.flip(eigvals)
+    assert eigvals[0] >= eigvals[1] >= eigvals[2] >= 0, f"eigen values are not as expected \n{eigvals}\n{cov_tensor}"
     # compute features
     # 0 = sum           5 = linearity
     # 1 = omnivariance  6 = surface variation
@@ -325,33 +330,37 @@ def _compute_geo(pts):
     results = np.zeros(len(selected_features), dtype=np.float32)
     ind = 0
     for s in selected_features:
-        if s == 0:
-            results[ind] = eigvals.sum(dtype=np.float32)
-            ind += 1
-        elif s == 1:
-            results[ind] = eigvals.prod() ** (1/3)
-            ind += 1
-        elif s == 2:
-            lneig = np.log(eigvals)
-            results[ind] = -np.dot(lneig, eigvals)
-            ind += 1
-        elif s == 3:
-            results[ind] = (eigvals[0] - eigvals[2]) / eigvals[0]
-            ind += 1
-        elif s == 4:
-            results[ind] = (eigvals[1] - eigvals[2]) / eigvals[0]
-            ind += 1
-        elif s == 5:
-            results[ind] = (eigvals[0] - eigvals[1]) / eigvals[0]
-            ind += 1
-        elif s == 6:
-            results[ind] = eigvals[2] / eigvals.sum(dtype=np.float32)
-            ind += 1
-        elif s == 7:
-            results[ind] = eigvals[2] / eigvals[0]
-            ind += 1
-        elif s == 8:
-            results[ind] = 1 - abs(np.dot(np.array([0,0,1]), eigvects[2]))
+        try:
+            if s == 0:
+                results[ind] = eigvals.sum(dtype=np.float32)
+                ind += 1
+            elif s == 1:
+                results[ind] = eigvals.prod() ** (1/3)
+                ind += 1
+            elif s == 2:
+                lneig = np.log(eigvals)
+                results[ind] = -np.dot(lneig, eigvals)
+                ind += 1
+            elif s == 3:
+                results[ind] = (eigvals[0] - eigvals[2]) / eigvals[0]
+                ind += 1
+            elif s == 4:
+                results[ind] = (eigvals[1] - eigvals[2]) / eigvals[0]
+                ind += 1
+            elif s == 5:
+                results[ind] = (eigvals[0] - eigvals[1]) / eigvals[0]
+                ind += 1
+            elif s == 6:
+                results[ind] = eigvals[2] / eigvals.sum(dtype=np.float32)
+                ind += 1
+            elif s == 7:
+                results[ind] = eigvals[2] / eigvals[0]
+                ind += 1
+            elif s == 8:
+                results[ind] = 1 - abs(np.dot(np.array([0,0,1]), eigvects[2]))
+                ind += 1
+        except RuntimeWarning:
+            results[ind] = np.nan
             ind += 1
     return results
 
