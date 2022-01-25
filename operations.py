@@ -5,6 +5,8 @@ from util import planeFit
 from multiprocessing import cpu_count, shared_memory
 from itertools import repeat
 from tqdm import tqdm
+from sympy import symbols, diff
+from scipy.optimize import curve_fit, OptimizeWarning
 import warnings
 
 np.seterr(all='warn')
@@ -253,16 +255,12 @@ def compute_verticality(pc, tree, PPEexec, radius=0.2, k=20):
     nn = nn.astype('int32')
     print("determining arg lists...")
     pt_groups = []
-    pt_list = []
-    pt_idx = 0
     for knn in nn:
         knn = knn[knn != tree.n]
         pt_groups.append(knn)
-        pt_list.append(pt_idx)
-        pt_idx += 1
     print(f"finished creating args, computing verticality for {len(nn)} points")
-    verticality = list(tqdm(PPEexec.map(_compute_vert, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()),
-                            total=len(pt_list)))
+    verticality = list(tqdm(PPEexec.map(_compute_vert, pt_groups, chunksize=len(pt_groups) // cpu_count()),
+                            total=len(pt_groups)))
     return verticality
 
 
@@ -289,7 +287,159 @@ def _compute_vert(pts):
     return vert
 
 
+def compute_mean_curvature(pc, tree, PPEexec, radius=0.2, k=20):
+    """
+    given a 3d point cloud compute the mean curvature of each point
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of mean curvature values with the same length as the number of points
+    """
+    print("Beginning mean curvature work")
+    # query tree for nearest neighbors
+    dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
+    print("determining arg lists...")
+    pt_groups = []
+    pt_list = []
+    pt_idx = 0
+    for knn in nn:
+        knn = knn[knn != tree.n]
+        pt_groups.append(knn)
+        pt_list.append(pt_idx)
+        pt_idx += 1
+    print(f"finished creating args, computing mean curvature for {len(nn)} points")
+    mean_curvature = list(tqdm(PPEexec.map(_compute_m_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
+    return mean_curvature
+
+
+def _compute_m_curve(pts, current_pt):
+    '''
+    Helper function that computes the mean curvature of the plane surrounding a point by finding the equation of the
+    plane of best fit, then finding the partial derivatives needed to compute H
+    :param pts: a list of indices for points in the data matrix
+    :param current_pt: the current point (x, y, z)
+    :return: the mean curvature of the point
+    '''
+    if len(pts) < 6:
+        return np.nan
+    curve_points = np.array(data[pts])
+    try:
+        constants, _ = curve_fit(curve_equation, curve_points, curve_points[:, 2])
+    except OptimizeWarning:
+        pass
+    X, Y = symbols('X Y', real=True)
+    f = (constants[0] * X ** 2) + (constants[1] * Y ** 2) + (constants[2] * X * Y) + (constants[3] * X) + \
+        (constants[4] * Y) + constants[5]
+
+    # differentiating function f in respect to X
+    f_x = diff(f, X)
+    # differentiating function f in respect to Y
+    f_y = diff(f, Y)
+    # differentiating function f_x in respect to X
+    f_xx = diff(f_x, X)
+    # differentiating function f_y in respect to Y
+    f_yy = diff(f_y, Y)
+    # differentiating function f_x in respect to Y
+    f_xy = diff(f_x, Y)
+
+    current_pt = data[current_pt]
+
+    # mean curvature equation
+    H = (f_xx * (1 + (f_y ** 2)) - 2 * f_xy * f_x * f_y + f_yy * (1 + (f_x ** 2))) / \
+        (2 * ((1 + (f_x ** 2) + (f_y ** 2)) ** (3/2)))
+    # substitute the x and y values of the current point into H
+    m_curvature = H.subs([(X, current_pt[0]), (Y, current_pt[1])])
+    return m_curvature
+
+
+def curve_equation(curve_points, c1, c2, c3, c4, c5, c6):
+    # unpacking the multi-dim. array column-wise, that's why the transpose
+    x, y, z = curve_points.T
+    return (c1 * x ** 2) + (c2 * y ** 2) + (c3 * x * y) + (c4 * x) + (c5 * y) + c6
+
+
+def compute_gaussian_curvature(pc, tree, PPEexec, radius=0.2, k=20):
+    """
+    given a 3d point cloud computes the Gaussian curvature of each point
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of Gaussian curvature values with the same length as the number of points
+    """
+    print("Beginning Gaussian curvature work")
+    # query tree for nearest neighbors
+    dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
+    nn = nn.astype('int32')
+    print("determining arg lists...")
+    pt_groups = []
+    pt_list = []
+    pt_idx = 0
+    for knn in nn:
+        knn = knn[knn != tree.n]
+        pt_groups.append(knn)
+        pt_list.append(pt_idx)
+        pt_idx += 1
+    print(f"finished creating args, computing Gaussian curvature for {len(nn)} points")
+    mean_curvature = list(
+        tqdm(PPEexec.map(_compute_g_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
+    return mean_curvature
+
+
+def _compute_g_curve(pts, current_pt):
+    '''
+    Helper function that computes the Gaussian curvature of the plane surrounding a point by finding the equation of the
+    plane of best fit, then finding the partial derivatives needed to compute K
+    :param pts: a list of indices for points in the data matrix
+    :param current_pt: the current point (x, y, z)
+    :return: the Gaussian curvature of the point
+    '''
+    if len(pts) < 6:
+        return np.nan
+    curve_points = np.array(data[pts])
+    try:
+        constants, _ = curve_fit(curve_equation, curve_points, curve_points[:, 2])
+    except OptimizeWarning:
+        pass
+    X, Y = symbols('X Y', real=True)
+    f = (constants[0] * X ** 2) + (constants[1] * Y ** 2) + (constants[2] * X * Y) + (constants[3] * X) + \
+        (constants[4] * Y) + constants[5]
+
+    # differentiating function f in respect to X
+    f_x = diff(f, X)
+    # differentiating function f in respect to Y
+    f_y = diff(f, Y)
+    # differentiating function f_x in respect to X
+    f_xx = diff(f_x, X)
+    # differentiating function f_y in respect to Y
+    f_yy = diff(f_y, Y)
+    # differentiating function f_x in respect to Y
+    f_xy = diff(f_x, Y)
+
+    current_pt = data[current_pt]
+
+    # Gaussian curvature equation
+    K = (f_xx * f_yy - (f_xy ** 2)) / ((1 + (f_x ** 2) + (f_y ** 2)) ** 2)
+    # substitute the x and y values of the current point into K
+    g_curvature = K.subs([(X, current_pt[0]), (Y, current_pt[1])])
+    return g_curvature
+
+
 def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
+    """
+    Computes per point eigen features
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param sf: a list of selected features (ints corresponding to features)
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a dictionary of computed feature value lists
+    """
     print("Beginning feature work")
     # query tree for nearest neighbors
     _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
@@ -310,6 +460,14 @@ def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
 
 
 def _compute_geo(pts):
+    """
+    a helper function that computes eigen based geometric features for a single point. Determines a covariance matrix
+    for the given points and computes the corresponding eigen values and vectors. The properties of the matrix are such
+    that there are 3 eigen values and vectors with the values being non-negative. The following feature calculations
+    are simple and are taken from the related paper.
+    :param pts: a set of point indices associated with the nearest neighbors
+    :return: an array of feature values for the point
+    """
     if len(pts) < 4:  # the covariance matrix doesn't work if len(pts) < 3 where 3 represents the number of dimensions
         return np.full(len(selected_features), np.nan)
     # compute covariance matrix

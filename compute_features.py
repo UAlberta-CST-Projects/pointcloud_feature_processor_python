@@ -1,4 +1,5 @@
-from operations import compute_gradient, compute_roughness, compute_density, compute_max_local_height_difference, init_pool, compute_verticality, compute_geometric
+from operations import compute_gradient, compute_roughness, compute_density, compute_max_local_height_difference, \
+    init_pool, compute_verticality, compute_geometric, compute_mean_curvature, compute_gaussian_curvature
 from util import pointcloud as pc
 from os import path
 import argparse
@@ -24,13 +25,14 @@ def main():
     filepath = path.abspath(filepath)
 
     try:
-        fchoice = int(input("Do you want to see regular[0] or eigen[1] features?"))
+        fchoice = int(input("Do you want to see regular[0] or eigen[1] features?\n"))
     except ValueError:
         print("Invalid selection.")
         return
     if fchoice == 0:
-        options = {0,1,2,3,4}
+        options = {0, 1, 2, 3, 4, 5, 6}
         menu_blurb = ["Options:", "[0] z_gradient", "[1] roughness", "[2] density", "[3] z_diff", "[4] verticality",
+                      "[5] mean curvature", "[6] Gaussian curvature",
                       "Which features would you like to compute?",
                       "Multiple options can be selected if you separate them with spaces. (e.g. 0 3)", ""]
     elif fchoice == 1:
@@ -81,6 +83,10 @@ def main():
                     results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=0.5)
                 elif c == 4:
                     results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
+                elif c == 5:
+                    results["mean_curvature"] = compute_mean_curvature(pts, tree, executor, radius=0.3)
+                elif c == 6:
+                    results["Gaussian_curvature"] = compute_gaussian_curvature(pts, tree, executor, radius=0.3)
         else:
             results = compute_geometric(pts, tree, executor, clist, radius=0.5)
     # cleanup shared memory block
