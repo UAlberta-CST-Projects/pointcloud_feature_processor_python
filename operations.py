@@ -311,7 +311,7 @@ def compute_mean_curvature(pc, tree, PPEexec, radius=0.2, k=20):
         pt_idx += 1
     print(f"finished creating args, computing mean curvature for {len(nn)} points")
     mean_curvature = np.array(list(tqdm(PPEexec.map(_compute_m_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
-    return mean_curvature - np.nanmin(mean_curvature)
+    return np.log((mean_curvature - np.nanmin(mean_curvature)) + 1)
 
 
 def _compute_m_curve(pts, current_pt):
@@ -329,7 +329,7 @@ def _compute_m_curve(pts, current_pt):
     constants = quadric_equation(curve_points[:, 0], curve_points[:, 1], curve_points[:, 2])
     estimate_pt = getclosestpoint(current_pt, constants)
     k_values = compute_fundamentals(estimate_pt, constants)
-    m_curvature = log(abs((k_values[0] + k_values[1]) / 2))  # H
+    m_curvature = abs((k_values[0] + k_values[1]) / 2)  # H
     return m_curvature
 
 
@@ -364,7 +364,7 @@ def compute_gaussian_curvature(pc, tree, PPEexec, radius=0.2, k=20):
         pt_idx += 1
     print(f"finished creating args, computing Gaussian curvature for {len(nn)} points")
     gauss_curvature = np.array(list(tqdm(PPEexec.map(_compute_g_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
-    return gauss_curvature - np.nanmin(gauss_curvature)
+    return np.log((gauss_curvature - np.nanmin(gauss_curvature)) + 1)
 
 
 def _compute_g_curve(pts, current_pt):
@@ -383,7 +383,7 @@ def _compute_g_curve(pts, current_pt):
     estimate_pt = getclosestpoint(current_pt, constants)
     k_values = compute_fundamentals(estimate_pt, constants)
     g_curvature = np.real(k_values[0] * k_values[1])  # K
-    return log(abs(g_curvature * 100))
+    return abs(g_curvature * 100)
 
 
 def quadric_equation(X, Y, Z):

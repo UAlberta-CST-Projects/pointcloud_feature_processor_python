@@ -304,9 +304,6 @@ def interface():
         slist = [smap[f[0]] for f in standardfeatures.items() if f[1].get()]
         clist = [cmap[f[0]] for f in curvaturefeatures.items() if f[1].get()]
         elist = [emap[f[0]] for f in efeatures.items() if f[1].get()]
-        print(slist)
-        print(clist)
-        print(elist)
         window.destroy()
         try:
             irad = float(radius.get())
