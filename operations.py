@@ -1,13 +1,12 @@
-from math import sqrt
+from math import sqrt, log
 from numpy.linalg import norm
 import numpy as np
 from util import planeFit
 from multiprocessing import cpu_count, shared_memory
 from itertools import repeat
 from tqdm import tqdm
-from sympy import symbols, diff
-from scipy.optimize import curve_fit, OptimizeWarning
 import warnings
+from surface_intersection import getclosestpoint
 
 np.seterr(all='warn')
 warnings.filterwarnings('error')
@@ -311,8 +310,8 @@ def compute_mean_curvature(pc, tree, PPEexec, radius=0.2, k=20):
         pt_list.append(pt_idx)
         pt_idx += 1
     print(f"finished creating args, computing mean curvature for {len(nn)} points")
-    mean_curvature = list(tqdm(PPEexec.map(_compute_m_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
-    return mean_curvature
+    mean_curvature = np.array(list(tqdm(PPEexec.map(_compute_m_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
+    return mean_curvature - np.nanmin(mean_curvature)
 
 
 def _compute_m_curve(pts, current_pt):
@@ -326,39 +325,18 @@ def _compute_m_curve(pts, current_pt):
     if len(pts) < 6:
         return np.nan
     curve_points = np.array(data[pts])
-    try:
-        constants, _ = curve_fit(curve_equation, curve_points, curve_points[:, 2])
-    except OptimizeWarning:
-        pass
-    X, Y = symbols('X Y', real=True)
-    f = (constants[0] * X ** 2) + (constants[1] * Y ** 2) + (constants[2] * X * Y) + (constants[3] * X) + \
-        (constants[4] * Y) + constants[5]
-
-    # differentiating function f in respect to X
-    f_x = diff(f, X)
-    # differentiating function f in respect to Y
-    f_y = diff(f, Y)
-    # differentiating function f_x in respect to X
-    f_xx = diff(f_x, X)
-    # differentiating function f_y in respect to Y
-    f_yy = diff(f_y, Y)
-    # differentiating function f_x in respect to Y
-    f_xy = diff(f_x, Y)
-
     current_pt = data[current_pt]
-
-    # mean curvature equation
-    H = (f_xx * (1 + (f_y ** 2)) - 2 * f_xy * f_x * f_y + f_yy * (1 + (f_x ** 2))) / \
-        (2 * ((1 + (f_x ** 2) + (f_y ** 2)) ** (3/2)))
-    # substitute the x and y values of the current point into H
-    m_curvature = H.subs([(X, current_pt[0]), (Y, current_pt[1])])
+    constants = quadric_equation(curve_points[:, 0], curve_points[:, 1], curve_points[:, 2])
+    estimate_pt = getclosestpoint(current_pt, constants)
+    k_values = compute_fundamentals(estimate_pt, constants)
+    m_curvature = log(abs((k_values[0] + k_values[1]) / 2))  # H
     return m_curvature
 
 
-def curve_equation(curve_points, c1, c2, c3, c4, c5, c6):
+def curve_equation(curve_points, c0, c1, c2, c3, c4, c5):
     # unpacking the multi-dim. array column-wise, that's why the transpose
     x, y, z = curve_points.T
-    return (c1 * x ** 2) + (c2 * y ** 2) + (c3 * x * y) + (c4 * x) + (c5 * y) + c6
+    return (c0 * x ** 2) + (c1 * y ** 2) + (c2 * x * y) + (c3 * x) + (c4 * y) + c5
 
 
 def compute_gaussian_curvature(pc, tree, PPEexec, radius=0.2, k=20):
@@ -385,9 +363,8 @@ def compute_gaussian_curvature(pc, tree, PPEexec, radius=0.2, k=20):
         pt_list.append(pt_idx)
         pt_idx += 1
     print(f"finished creating args, computing Gaussian curvature for {len(nn)} points")
-    mean_curvature = list(
-        tqdm(PPEexec.map(_compute_g_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
-    return mean_curvature
+    gauss_curvature = np.array(list(tqdm(PPEexec.map(_compute_g_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
+    return gauss_curvature - np.nanmin(gauss_curvature)
 
 
 def _compute_g_curve(pts, current_pt):
@@ -401,32 +378,77 @@ def _compute_g_curve(pts, current_pt):
     if len(pts) < 6:
         return np.nan
     curve_points = np.array(data[pts])
-    try:
-        constants, _ = curve_fit(curve_equation, curve_points, curve_points[:, 2])
-    except OptimizeWarning:
-        pass
-    X, Y = symbols('X Y', real=True)
-    f = (constants[0] * X ** 2) + (constants[1] * Y ** 2) + (constants[2] * X * Y) + (constants[3] * X) + \
-        (constants[4] * Y) + constants[5]
-
-    # differentiating function f in respect to X
-    f_x = diff(f, X)
-    # differentiating function f in respect to Y
-    f_y = diff(f, Y)
-    # differentiating function f_x in respect to X
-    f_xx = diff(f_x, X)
-    # differentiating function f_y in respect to Y
-    f_yy = diff(f_y, Y)
-    # differentiating function f_x in respect to Y
-    f_xy = diff(f_x, Y)
-
     current_pt = data[current_pt]
+    constants = quadric_equation(curve_points[:, 0], curve_points[:, 1], curve_points[:, 2])
+    estimate_pt = getclosestpoint(current_pt, constants)
+    k_values = compute_fundamentals(estimate_pt, constants)
+    g_curvature = np.real(k_values[0] * k_values[1])  # K
+    return log(abs(g_curvature * 100))
 
-    # Gaussian curvature equation
-    K = (f_xx * f_yy - (f_xy ** 2)) / ((1 + (f_x ** 2) + (f_y ** 2)) ** 2)
-    # substitute the x and y values of the current point into K
-    g_curvature = K.subs([(X, current_pt[0]), (Y, current_pt[1])])
-    return g_curvature
+
+def quadric_equation(X, Y, Z):
+    """
+    https://github.com/rbv188/quadric-curve-fit/blob/master/quadrics.py
+    :param X: array of x coordinates
+    :param Y: array of y coordinates
+    :param Z: array of z coordinates
+    :return: the 9 equation coefficients
+    """
+    X = X.reshape((len(X), 1))
+    Y = Y.reshape((len(Y), 1))
+    Z = Z.reshape((len(Z), 1))
+    num = len(X)
+
+    matrix = np.hstack((X**2, Y**2, Z**2, 2*X*Y, 2*X*Z, 2*Y*Z, 2*X, 2*Y, 2*Z))
+    output = np.ones((num, 1))
+
+    [a, b, c, d, e, f, g, h, i] = np.dot(np.dot(np.linalg.inv(np.dot(np.transpose(matrix), matrix)),
+                                                np.transpose(matrix)), output)
+
+    a = -a[0]
+    b = -b[0]
+    c = -c[0]
+    d = -d[0]
+    e = -e[0]
+    f = -f[0]
+    g = -g[0]
+    h = -h[0]
+    i = -i[0]
+    j = 1
+
+    constants = np.array([a, b, c, d, f, e, g, h, i, j])
+    #                     0  1  2  3  4  5  6  7  8  9
+    return constants
+
+
+def compute_fundamentals(point, constants):
+    # ax^2 + by^2 + cz^2 + exy + fyz + gxz + lx + my + nz + d = 0
+    # 0      1      2      3     5     4     6    7    8    9
+    Fx = 2*constants[0]*point[0] + constants[3]*point[1] + constants[4]*point[2] + constants[6]
+    Fy = 2*constants[1]*point[1] + constants[3]*point[0] + constants[5]*point[2] + constants[7]
+    Fz = 2*constants[2]*point[2] + constants[5]*point[1] + constants[4]*point[0] + constants[8]
+    Fxx = 2*constants[0]
+    Fyy = 2*constants[1]
+    Fzz = 2*constants[2]
+    Fxy = constants[3]
+    Fyz = constants[5]
+    Fxz = constants[4]
+    grad_F = sqrt(Fx ** 2 + Fy ** 2 + Fz ** 2)
+
+    # from https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.98.7059&rep=rep1&type=pdf
+    E = 1 + (Fx**2 / Fz**2)
+    F = Fx * Fy / Fz**2
+    G = 1 + (Fy**2 / Fz**2)
+    L = (1 / (Fz**2 * grad_F)) * np.linalg.det(np.array(([Fxx, Fxz, Fx], [Fxz, Fzz, Fz], [Fx, Fz, 0])))
+    M = (1 / (Fz**2 * grad_F)) * np.linalg.det(np.array(([Fxy, Fyz, Fy], [Fxz, Fzz, Fz], [Fx, Fz, 0])))
+    N = (1 / (Fz**2 * grad_F)) * np.linalg.det(np.array(([Fyy, Fyz, Fy], [Fyz, Fzz, Fz], [Fy, Fz, 0])))
+
+    A = np.array(([L, M], [M, N]))
+    B = np.array(([E, F], [F, G]))
+    B_inv = np.linalg.inv(B)
+
+    k_values = np.linalg.eigvals(np.dot(B_inv, A))
+    return k_values
 
 
 def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
