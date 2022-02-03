@@ -55,9 +55,9 @@ def main():
     # setup shared memory space so all processes can access the point data for processing
     points, header = pc.from_las(filepath)
     pc_as_np = points.xyz.to_numpy()
-    # pc_as_np[:, 0] -= header.offsets[0]
-    # pc_as_np[:, 1] -= header.offsets[1]
-    # pc_as_np[:, 2] -= header.offsets[2]
+    pc_as_np[:, 0] -= header.offsets[0]
+    pc_as_np[:, 1] -= header.offsets[1]
+    pc_as_np[:, 2] -= header.offsets[2]
     shm = shared_memory.SharedMemory(create=True, size=pc_as_np.nbytes)
     sharr = np.ndarray(pc_as_np.shape, dtype=pc_as_np.dtype, buffer=shm.buf)
     sharr[:] = pc_as_np[:]
@@ -84,9 +84,9 @@ def main():
                 elif c == 4:
                     results["verticality"] = compute_verticality(pts, tree, executor, radius=0.3)
                 elif c == 5:
-                    results["mean_curvature"] = compute_mean_curvature(pts, tree, executor, radius=0.3)
+                    results["mean_curvature"] = compute_mean_curvature(pts, tree, executor, radius=0.3, k=300)
                 elif c == 6:
-                    results["Gaussian_curvature"] = compute_gaussian_curvature(pts, tree, executor, radius=0.3)
+                    results["Gaussian_curvature"] = compute_gaussian_curvature(pts, tree, executor, radius=0.5, k=300)
         else:
             results = compute_geometric(pts, tree, executor, clist, radius=0.5)
     # cleanup shared memory block
