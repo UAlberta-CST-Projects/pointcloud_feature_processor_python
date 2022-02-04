@@ -15,13 +15,15 @@ Windows: After installing from the link above, you should have a new terminal ap
 > conda activate pointcloudenv
 and run the project with either of the usage instructions below.
 
+Note: At present the way work is distributed amongst workers has high memory usage and overhead as a result. This may or may not be resolved later time permitting.
+
 Usages:
-1. You can simply run the compute_features.py file and it will guide you through the process.
+1. (Recommended) You can simply run the compute_features.py file and it will guide you through the process.
 > python compute_features.py
 You can also run compute_features.py through pycharm if you properly set the python environment for this project in pycharm.
-Note: When asked for which features you would like, you can specify multiple options by inputting the associated numbers space separated. (e.g. 0 1 3)
+Note(legacy interface): When asked for which features you would like, you can specify multiple options by inputting the associated numbers space separated. (e.g. 0 1 3)
 
-2. You can use the basic cli to run it from the terminal.
+2. You can use the basic cli to run it from the terminal. Although not all features are available via cli at this point in time.
 > python compute_features.py --file=S.las --gradient --gfield=z
 > python compute_features.py --file=S.las --roughness --rradius=0.2 --zdiff --diffradius=0.2
 
