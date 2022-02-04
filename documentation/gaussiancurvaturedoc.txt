@@ -1,0 +1,79 @@
+DOCUMENTATION FOR compute_gaussian_curvature() IN operations.py
+
+As in CloudCompare, the Gaussian curvature of a point is an intrinsic measure of curvature, depending only on
+distances that are measured on the surface, not on the way it is isometrically embedded in Euclidean space.
+It is represented by the variable K. 
+
+To run this function, run the program compute_features.py. Open a point cloud file and then enter "6" into the
+console when prompted to calculate the Gaussian curvature of the points in the point cloud.
+
+---
+
+compute_gaussian_curvature() computes the Gaussian curvature of each point in a given 3D point cloud. Its paramaters and 
+return are as follows:
+
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of Gaussian curvature values with the same length as the number of points
+
+This function first established a query tree for the nearest neighbours and determines arg lists (same as other
+functions in the code), then computes the Gaussian curvature for each point using the helper function 
+_compute_g_curve().
+
+---
+
+_compute_g_curve() is a helper function that computes the Guassian curvature of a single point. It is built to
+work with the map function. Its parameters and return are as follows:
+
+    :param pts: a list of indices for points in the data matrix
+    :param current_pt: the current point (x, y, z)
+    :return: the Gaussian curvature of the point
+
+This function starts to find the Gaussian curvature of a point by finding the equation of the best-fit surface
+created by the surrounding points with the format (in the method quadric_equation()):
+
+	a*x**2 + b*y**2 + c*z**2 + d*x*y + e*y*z + f*x*z + g*x + h*y + i*z + j = 0
+
+where (a, b, c, d, e, f, g, h, i, j) are constants. Next, the nearest point to the current point of interest that
+lies on the best-fit surface is found using the method getclosestpoint() (see surface_intersection.py).Then the
+program finds the first and second partial derivatives of the equation with respect to x, y, and z, and the
+gradient of the equation. The coordinates of the nearest point are used for the values of x, y, and z in this
+calculation. The program then uses the following formulas to compute the Gaussian curvature (in the method 
+compute_fundamentals()):
+
+	    				E = 1 + (Fx**2 / Fz**2)
+    					F = Fx * Fy / Fz**2
+    					G = 1 + (Fy**2 / Fz**2)
+    		L = (1 / Fz**2 * grad_F) * det(([Fxx, Fxz, Fx], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
+   		M = (1 / Fz**2 * grad_F) * det(([Fxy, Fyz, Fy], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
+    		N = (1 / Fz**2 * grad_F) * det(([Fyy, Fyz, Fy], [Fyz, Fzz, Fz], [Fy, Fz, 0]))
+
+    					A = ([L, M], [M, N])
+    					B = ([E, F], [F, G])
+    					B_inv = inverse(B)
+
+    				k_values = eigenvalues(dot(B_inv, A))
+
+where Fx is the first derivative of the function with respect to x, Fy is the first derivative of the function
+with respect to y, Fz is the first derivative of the function with respect to z, Fxx is the second derivative of 
+the function with respect to x, Fyy is the second derivative of the function with respect to y, Fzz is the second
+derivative of the function with respect to z, Fxy is the second derivative of the function with respect to x and 
+then to y, Fyz is the second derivative of the function with respect to y and then to z, Fxz is the second 
+derivative of the function with respect to x and then to z, and grad_F is the magnitude of the gradient of the 
+function. The variables E, F, and G are therefore the coefficients of the First Fundamental Form and the variables
+L, M, and N are the coefficients of the Second Fundamental Form. The k values are then computed by finding the
+eigen values of B_inv*A (dot product of two matrices), which are k1 and k2.
+
+Finally, the Gaussian curvature of the point is computed:
+
+					gaussian_curvature = k1 * k2
+
+Any resulting value less than zero is returned as zero, and any value greater than 30000 is returned as 30000
+to create reasonable bounds for the values.
+
+RESOURCES:
+https://github.com/rbv188/quadric-curve-fit/blob/master/quadrics.py
+https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.98.7059&rep=rep1&type=pdf
