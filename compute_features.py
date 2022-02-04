@@ -270,8 +270,6 @@ def interface():
     tk.Checkbutton(master=frame11, text='Mean', variable=curvaturefeatures['mean']).pack()
     curvaturefeatures['gauss'] = tk.IntVar()
     tk.Checkbutton(master=frame11, text='Gaussian', variable=curvaturefeatures['gauss']).pack()
-    curvaturefeatures['normal'] = tk.IntVar()
-    tk.Checkbutton(master=frame11, text='Normal', variable=curvaturefeatures['normal']).pack()
 
     efeatures = {}
     frame2 = tk.Frame()
@@ -291,7 +289,7 @@ def interface():
     efeatures['linearity'] = tk.IntVar()
     tk.Checkbutton(master=frame2, text='Linearity', variable=efeatures['linearity']).pack()
     efeatures['surfacevar'] = tk.IntVar()
-    tk.Checkbutton(master=frame2, text='Surface Variation', variable=efeatures['surfacevar']).pack()
+    tk.Checkbutton(master=frame2, text='Surface Variation/\nNormal Curvature', variable=efeatures['surfacevar']).pack()
     efeatures['sphericity'] = tk.IntVar()
     tk.Checkbutton(master=frame2, text='Sphericity', variable=efeatures['sphericity']).pack()
     efeatures['verticality'] = tk.IntVar()
@@ -299,7 +297,7 @@ def interface():
 
     def submit():
         smap = {'gradient': 0, 'roughness': 1, 'density': 2, 'z diff': 3, 'verticality': 4}
-        cmap = {'mean': 0, 'gauss': 1, 'normal': 2}
+        cmap = {'mean': 0, 'gauss': 1}
         emap = {'sum': 0, 'omnivariance': 1, 'eigenentropy': 2, 'anisotropy': 3, 'planarity': 4, 'linearity': 5, 'surfacevar': 6, 'sphericity': 7, 'verticality': 8}
         slist = [smap[f[0]] for f in standardfeatures.items() if f[1].get()]
         clist = [cmap[f[0]] for f in curvaturefeatures.items() if f[1].get()]
