@@ -46,9 +46,9 @@ compute_fundamentals()):
 	    				E = 1 + (Fx**2 / Fz**2)
     					F = Fx * Fy / Fz**2
     					G = 1 + (Fy**2 / Fz**2)
-    		L = (1 / Fz**2 * grad_F) * det(([Fxx, Fxz, Fx], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
-   		M = (1 / Fz**2 * grad_F) * det(([Fxy, Fyz, Fy], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
-    		N = (1 / Fz**2 * grad_F) * det(([Fyy, Fyz, Fy], [Fyz, Fzz, Fz], [Fy, Fz, 0]))
+    		L = (1 / (Fz**2 * grad_F)) * det(([Fxx, Fxz, Fx], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
+   		M = (1 / (Fz**2 * grad_F)) * det(([Fxy, Fyz, Fy], [Fxz, Fzz, Fz], [Fx, Fz, 0]))
+    		N = (1 / (Fz**2 * grad_F)) * det(([Fyy, Fyz, Fy], [Fyz, Fzz, Fz], [Fy, Fz, 0]))
 
     					A = ([L, M], [M, N])
     					B = ([E, F], [F, G])
@@ -70,8 +70,8 @@ Finally, the mean curvature of the point is computed:
 
 					mean_curvature = (k1 + k2) / 2
 
-Any resulting value less than zero is returned as zero, and any value greater than 30000 is returned as 30000
-to create reasonable bounds for the values.
+For easier visualization in cloudcompare the resulting values are translated such that 1 is the minimum value
+followed by taking the logarithm of each value.
 
 RESOURCES:
 https://github.com/rbv188/quadric-curve-fit/blob/master/quadrics.py
