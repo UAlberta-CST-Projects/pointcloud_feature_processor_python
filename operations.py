@@ -418,7 +418,7 @@ def quadric_equation(X, Y, Z):
     i = -i[0]
     j = 1
 
-    constants = np.array([a, b, c, d, f, e, g, h, i, j])
+    constants = np.array([a, b, c, d, e, f, g, h, i, j])
     return constants
 
 
@@ -431,15 +431,15 @@ def compute_fundamentals(point, constants):
     :param constants: the constants of the quadric surface
     :return: the k-values of the curvature of the quadric surface at the point
     '''
-    Fx = 2*constants[0]*point[0] + constants[3]*point[1] + constants[4]*point[2] + constants[6]
-    Fy = 2*constants[1]*point[1] + constants[3]*point[0] + constants[5]*point[2] + constants[7]
-    Fz = 2*constants[2]*point[2] + constants[5]*point[1] + constants[4]*point[0] + constants[8]
+    Fx = 2*constants[0]*point[0] + constants[3]*point[1] + constants[5]*point[2] + constants[6]
+    Fy = 2*constants[1]*point[1] + constants[3]*point[0] + constants[4]*point[2] + constants[7]
+    Fz = 2*constants[2]*point[2] + constants[4]*point[1] + constants[5]*point[0] + constants[8]
     Fxx = 2*constants[0]
     Fyy = 2*constants[1]
     Fzz = 2*constants[2]
     Fxy = constants[3]
-    Fyz = constants[5]
-    Fxz = constants[4]
+    Fyz = constants[4]
+    Fxz = constants[5]
     grad_F = sqrt(Fx ** 2 + Fy ** 2 + Fz ** 2)
 
     # from https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.98.7059&rep=rep1&type=pdf
