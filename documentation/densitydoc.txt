@@ -1,0 +1,48 @@
+DOCUMENTATION FOR compute_density() IN operations.py
+
+As in CloudCompare, the density of a point is the amount of points surrounding the point within a specified radius.
+The function compute_density() will compute the density of the point.
+
+To run this function, run the program compute_features.py. Open a point cloud file and then enter "2" into the
+console when prompted to calculate the density of the points in the point cloud.
+
+---
+
+compute_density() computes the density of each point in a given 3D point cloud. Its paramaters and 
+return are as follows:
+
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param precise: indicates whether density is reported as number of neighbors (True), or as a rougher distance
+		based approximation (False)
+    :param k: the max number of nearest neighbors to query
+    :return: a list of density values with the same length as the number of points
+
+This function first established a query tree for the nearest neighbours and determines arg lists (same as other
+functions in the code), then computes the density for each point using the helper function 
+_compute_den().
+
+---
+
+_compute_den() is a helper function that computes the density of a single point. It is built to work with the map
+function. Its parameters and return are as follows:
+
+    :param pts: The indices of the points within the specified radius of the current point. The length of this list
+    		is the only real information necessary.
+    :param dd: A list of the distances to the nearest neighbors which align with those in pts.
+    :param radius: The radius that was specified to be considered for density.
+    :param precise: Indicates whether density is reported as number of neighbors (True),
+    		or as a rougher distance based approximation (False).
+    :return: The density of the current point as either the number of nearest neighbors or a distance approximation.
+
+This function starts to find the density of a point by finding the between the point of interest and its nearest
+neighbour, which is used as an inverse measure of density. If only one point is given in the list 'pts', it is
+assumed that the point does not have any nearby neaighbours and therefore has a density of 0. This assumption is
+checked by determining if the distance between the point and the nearest neighbour is less than 0.01. The function
+then takes the distance to the nearest and computes the density with the following formula:
+
+			          	density = 1 - (distance / radius)
+
+The density is then returned.
