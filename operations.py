@@ -299,7 +299,9 @@ def _compute_g_curve(current_pt):
 
 def quadric_equation(X, Y, Z):
     """
-    https://github.com/rbv188/quadric-curve-fit/blob/master/quadrics.py
+    Helper function used in compute_mean_curvature() and compute_gaussian_curvature() that fits a quadric surface to
+    a list of points and returns the constants of the quadric equation of the surface. For more information, see the
+    documentation on those functions or https://github.com/rbv188/quadric-curve-fit/blob/master/quadrics.py
     :param X: array of x coordinates
     :param Y: array of y coordinates
     :param Z: array of z coordinates
@@ -328,13 +330,18 @@ def quadric_equation(X, Y, Z):
     j = 1
 
     constants = np.array([a, b, c, d, f, e, g, h, i, j])
-    #                     0  1  2  3  4  5  6  7  8  9
     return constants
 
 
 def compute_fundamentals(point, constants):
-    # ax^2 + by^2 + cz^2 + exy + fyz + gxz + lx + my + nz + d = 0
-    # 0      1      2      3     5     4     6    7    8    9
+    '''
+    Helper function used in compute_mean_curvature() and compute_gaussian_curvature() that computes the k-values of
+    curvature by finding the First and Second Fundamental Forms (E, F, G, L, M, N). For more information, see the
+    documentation on those functions.
+    :param point: the current point on the quadric surface
+    :param constants: the constants of the quadric surface
+    :return: the k-values of the curvature of the quadric surface at the point
+    '''
     Fx = 2*constants[0]*point[0] + constants[3]*point[1] + constants[4]*point[2] + constants[6]
     Fy = 2*constants[1]*point[1] + constants[3]*point[0] + constants[5]*point[2] + constants[7]
     Fz = 2*constants[2]*point[2] + constants[5]*point[1] + constants[4]*point[0] + constants[8]

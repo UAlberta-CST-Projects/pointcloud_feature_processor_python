@@ -1,0 +1,40 @@
+DOCUMENTATION FOR compute_max_local_height_difference() IN operations.py
+
+As in CloudCompare, the max height difference of a point is the maximum difference in height between a point and the
+surrounding points. The function compute_max_local_height_difference() will compute this difference in the
+z-direction of the point. 
+
+To run this function, run the program compute_features.py. Open a point cloud file and then enter "3" into the
+console when prompted to calculate the max height difference of the points in the point cloud.
+
+---
+
+compute_max_local_height_difference() computes the max z-direction difference of each point in a given 3D point
+cloud. Its paramaters and return are as follows:
+
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of height difference values with the same length as the number of points
+
+This function first established a query tree for the nearest neighbours and determines arg lists (same as other
+functions in the code), then computes the max height difference for each point using the helper function 
+_compute_height	_diff().
+
+---
+
+_compute_height	_diff() is a helper function that computes the max height difference of a single point. It is built
+to work with the map function. Its parameters and return are as follows:
+
+    :param pts: a list of indices for points in the data matrix
+    :return: the max height difference found in pts as a foot measurement
+
+This function starts to find the max height difference of a point by finding the z-coordinate of each point in 'pts'
+then finding the minimum and maximum values among these coordinates. The height difference is computed by the
+following formula:
+
+					height_diff = abs(max - min)
+
+The height difference is then returned.

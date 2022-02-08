@@ -1,0 +1,55 @@
+DOCUMENTATION FOR compute_gradient() IN operations.py
+
+As in CloudCompare, the gradient of a point is the slope of inclination of the tangent to that point. In 3D space,
+the gradient can be found in the x, y, and z directions. The function compute_gradient() will compute the gradient
+of the point in the z-direction.
+
+To run this function, run the program compute_features.py. Open a point cloud file and then enter "0" into the
+console when prompted to calculate the gradient in the z-direction of the points in the point cloud.
+
+---
+
+compute_gradient() computes the gradient of each point in a given 3D point cloud. Its paramaters and 
+return are as follows:
+
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param gfield: the coordinate you want to compute gradient over
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of slopes with the same length as the number of points
+
+This function first established a query tree for the nearest neighbours and determines arg lists (same as other
+functions in the code), then computes the gradient for each point using the helper function 
+_compute_grad(). The parameter gfield defaults to 'z', but can be changed to 'x' or 'y' for gradients in those
+directions.
+
+---
+
+_compute_grad() is a helper function that computes the gradient of a single point. It is built to
+work with the map function. Its parameters and return are as follows:
+
+    :param pts: The indices of the points within the specified radius of the current point.
+    :param gfield: x, y, or z, determines on which plane gradient is computed for.
+    :return: The slope value of the given area determined by the given points (the gradient).
+
+This function starts to find the gradient of a point by finding the normal vector and a point on the surface of the
+best fit plane of the point and surrounding point. The normal vector is normalized, then the slope is calculated
+and returned.
+
+If 'gfield' was entered as 'z', the z-coordinate of the normal is checked. If the value is negative, the entire
+normal vector is multiplied by -1 so that the z-coordinate is positive. The slope is then calculated by:
+		                       slope = sqrt(x**2 + y**2)
+
+
+If 'gfield' was entered as 'x', the x-coordinate of the normal is checked. If the value is negative, the entire
+normal vector is multiplied by -1 so that the x-coordinate is positive. The slope is then calculated by:
+		                       slope = sqrt(y**2 + z**2)
+
+
+If 'gfield' was entered as 'y', the y-coordinate of the normal is checked. If the value is negative, the entire
+normal vector is multiplied by -1 so that the y-coordinate is positive. The slope is then calculated by:
+		                       slope = sqrt(x**2 + z**2)
+
+If 'gfield' was not entered as 'x', 'y', or 'z', the function raises the exception "gfield must be x, y, or z".

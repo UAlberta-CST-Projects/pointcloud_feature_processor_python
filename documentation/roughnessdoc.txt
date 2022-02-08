@@ -1,0 +1,38 @@
+DOCUMENTATION FOR compute_roughness() IN operations.py
+
+As in CloudCompare, the roughness of a point is the distance from the point to the plane of best fit of the
+surrounding points. The function compute_roughness() will compute the roughness of the point.
+
+To run this function, run the program compute_features.py. Open a point cloud file and then enter "1" into the
+console when prompted to calculate the roughness of the points in the point cloud.
+
+---
+
+compute_roughness() computes the roughness of each point in a given 3D point cloud. Its paramaters and 
+return are as follows:
+
+    :param pc: a dataframe containing the xyz portion of the pointcloud
+    :param tree: a nearest neighbors tree for all the points
+    :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
+    :param radius: the radius in which to search for nearest neighbors
+    :param k: the max number of nearest neighbors to query
+    :return: a list of roughness values with the same length as the number of points
+
+This function first established a query tree for the nearest neighbours and determines arg lists (same as other
+functions in the code), then computes the roughness for each point using the helper function 
+_compute_rough().
+
+---
+
+_compute_rough() is a helper function that computes the roughness of a single point. It is built to
+work with the map function. Its parameters and return are as follows:
+
+    :param pts: The indices of the points within the specified radius of the current point.
+    :param current_pt: The point that roughness is currently being calculated for.
+    :return: The distance from the current point to the plane of best fit (the roughness).
+
+This function starts to find the roughness of a point by finding the normal vector and a point on the surface of the
+best fit plane of the point and surrounding point. The normal vector is normalized, then the coordinates of the
+point on the surface are subtracted from the coordinates of the point of interest. The function then projects the
+resulting vector onto the normal of the plane which gives the distance from the point to the plane. This distance
+is then normalized and returned.
