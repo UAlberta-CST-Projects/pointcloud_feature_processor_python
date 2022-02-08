@@ -122,31 +122,31 @@ def guimain(s, c, e, r=0.5, k=50):
     pts = points.xyz
     # build nearest neighbor tree
     print("Building KDtree...")
-    tree = cKDTree(pts, balanced_tree=False, compact_nodes=False)
+    tree = cKDTree(pc_as_np, balanced_tree=False)
     # create process manager
-    with ProcessPoolExecutor(max_workers=min(cpu_count() // 2, 6), initializer=init_pool,
-                             initargs=(shm.name, sharr.shape, sharr.dtype, e)) as executor:
+    with ProcessPoolExecutor(max_workers=cpu_count()-1, initializer=init_pool,
+                             initargs=(shm.name, sharr.shape, sharr.dtype, e, tree, r)) as executor:
         temp_idle = list(executor.map(_idle, list(range(cpu_count()))))
         for i in s:
             if i == 0:
-                results["z_gradient"] = compute_gradient(pts, tree, executor, gfield='z', radius=r)
+                results["z_gradient"] = compute_gradient(len(pc_as_np), executor)
             elif i == 1:
-                results["roughness"] = compute_roughness(pts, tree, executor, radius=r)
+                results["roughness"] = compute_roughness(len(pc_as_np), executor)
             elif i == 2:
-                results["density"] = compute_density(pts, tree, executor, radius=r, precise=True)
+                results["density"] = compute_density(len(pc_as_np), executor, radius=r, precise=True)
             elif i == 3:
-                results["z_diff"] = compute_max_local_height_difference(pts, tree, executor, radius=r)
+                results["z_diff"] = compute_max_local_height_difference(len(pc_as_np), executor)
             elif i == 4:
-                results["verticality"] = compute_verticality(pts, tree, executor, radius=r)
+                results["verticality"] = compute_verticality(len(pc_as_np), executor)
         for i in c:
             if i == 0:
-                results["mean_curvature"] = compute_mean_curvature(pts, tree, executor, radius=r, k=k)
+                results["mean_curvature"] = compute_mean_curvature(len(pc_as_np), executor)
             elif i == 1:
-                results["Gaussian_curvature"] = compute_gaussian_curvature(pts, tree, executor, radius=0.5, k=k)
+                results["Gaussian_curvature"] = compute_gaussian_curvature(len(pc_as_np), executor)
             elif i == 2:
                 pass
         if len(e) > 0:
-            results = {**results, **compute_geometric(pts, tree, executor, e, radius=r, k=k)}
+            results = {**results, **compute_geometric(len(pc_as_np), executor, e)}
         # cleanup shared memory block
     shm.close()
     shm.unlink()

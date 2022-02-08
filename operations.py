@@ -1,4 +1,4 @@
-from math import sqrt, log
+from math import sqrt
 from numpy.linalg import norm
 import numpy as np
 from util import planeFit
@@ -12,7 +12,7 @@ np.seterr(all='warn')
 warnings.filterwarnings('error')
 
 
-def init_pool(sha_mem_name, shape, sh_dtype, sel_features):
+def init_pool(sha_mem_name, shape, sh_dtype, sel_features, tree, r=0.5):
     """
     Runs at the start of every worker process spawned by ProcessPoolExecutor.
     Provides the worker access to the pointcloud data via shared memory.
@@ -24,46 +24,39 @@ def init_pool(sha_mem_name, shape, sh_dtype, sel_features):
     global data
     global shm  # fun fact: if this isn't global the entire memory block offs itself, I'd like my day back please.
     global selected_features
+    global kdtree
+    global rad
     shm = shared_memory.SharedMemory(name=sha_mem_name)
     data = np.ndarray(shape, dtype=sh_dtype, buffer=shm.buf)
     selected_features = sel_features
+    kdtree = tree
+    rad = r
 
 
-def compute_gradient(pc, tree, PPEexec, gfield='z', radius=0.2, k=20):
+def compute_gradient(numpts, PPEexec, gfield='z'):
     """
     given a 3d point cloud compute the gradient over the x, y, or z coordinate
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
     :param gfield: the coordinate you want to compute gradient over
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a list of slopes with the same length as the number of points
     """
-    print("Beginning gradient work")
-    # query tree for nearest neighbors
-    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-    print(f"finished creating args, computing gradient for {len(nn)} points")
-    # for each point get the related nearest neighbors and compute gradient
-    slopes = list(tqdm(PPEexec.map(_compute_grad, pt_groups, repeat(gfield), chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
+    print(f"Beginning gradient work for {numpts} points")
+    slopes = list(tqdm(PPEexec.map(_compute_grad, np.arange(numpts), repeat(gfield), chunksize=numpts // cpu_count()), total=numpts))
     return slopes
 
 
-def _compute_grad(pts, gfield):
+def _compute_grad(pt, gfield):
     """
     Helper function that computes the gradient of a single point. Built to work with the map function.
     This function finds the slope around a point by fitting a plane to the surrounding points.
     From this, a point and normal vector that define the plane are determined and used to calculate slope.
-    :param pts: The indices of the points within the specified radius of the current point.
+    :param pt: The index of the point to calculate the feature around.
     :param gfield: x, y, or z, determines on which plane gradient is computed for.
     :return: The slope value of the given area determined by the given points (the gradient).
     """
+    pt = data[pt]
+    pts = kdtree.query_ball_point(pt, rad)
     if len(pts) < 3:
         return np.nan
     # get the best fit plane as a point and normal vector
@@ -88,43 +81,29 @@ def _compute_grad(pts, gfield):
     return slope
 
 
-def compute_roughness(pc, tree, PPEexec, radius=0.2, k=20):
+def compute_roughness(numpts, PPEexec):
     """
     given a 3d point cloud compute the roughness of each point
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
     :param radius: the radius in which to search for nearest neighbors
     :param k: the max number of nearest neighbors to query
     :return: a list of roughness values with the same length as the number of points
     """
-    print("Beginning roughness work")
-    # query tree for nearest neighbors
-    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    pt_list = []
-    pt_idx = 0
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-        pt_list.append(pt_idx)
-        pt_idx += 1
-    print(f"finished creating args, computing roughness for {len(nn)} points")
-    roughnesses = list(tqdm(PPEexec.map(_compute_rough, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list)))
+    print(f"Beginning roughness work for {numpts} points")
+    roughnesses = list(tqdm(PPEexec.map(_compute_rough, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts))
     return roughnesses
 
 
-def _compute_rough(pts, current_pt):
+def _compute_rough(current_pt):
     """
     Helper function that computes the roughness of single point. Built to work with the map function.
     This function determines 'roughness' of a point by calculating how far the point is from the plane
     of best fit of the surrounding points.
-    :param pts: The indices of the points within the specified radius of the current point.
     :param current_pt: The point that roughness is currently being calculated for.
     :return: The distance from the current point to the plane of best fit (the roughness).
     """
+    pts = kdtree.query_ball_point(data[current_pt], rad)
     if len(pts) < 3:
         return np.nan
     # get the plane of best fit as a point and normal vector
@@ -136,58 +115,45 @@ def _compute_rough(pts, current_pt):
     return dist_to_plane
 
 
-def compute_density(pc, tree, PPEexec, radius=0.2, precise=False, k=20):
+def compute_density(numpts, PPEexec, radius=0.2, precise=False):
     """
     given a 3d point cloud compute the density around each point.
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
     :param radius: the radius in which to search for nearest neighbors
     :param precise: indicates whether density is reported as number of neighbors (True), or as a rougher distance based approximation (False)
     :param k: the max number of nearest neighbors to query
     :return: a list of density values with the same length as the number of points
     """
-    print("Beginning density work")
-    # query tree for nearest neighbors
-    if precise:
-        dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    else:
-        dd, nn = tree.query(pc, distance_upper_bound=radius, k=2, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    dd_groups = []
-    dd_group = 0
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-        dd_groups.append(dd[dd_group])
-        dd_group += 1
-    print(f"finished creating args, computing density for {len(nn)} points")
-    densities = list(tqdm(PPEexec.map(_compute_den, pt_groups, dd_groups, repeat(radius), repeat(precise), chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
+    print(f"Beginning density work for {numpts} points")
+    densities = list(tqdm(PPEexec.map(_compute_den, np.arange(numpts), repeat(radius), repeat(precise), chunksize=numpts // cpu_count()), total=numpts))
     return densities
 
 
-def _compute_den(pts, dd, radius, precise):
+def _compute_den(pt, radius, precise):
     """
     Helper function that computes the density of single point. Built to work with the map function.
     This function determines the density surrounding a point by either counting the number of neighbouring points
     within the specified radius, or by using the distance to the nearest point as an inverse estimation of the density.
-    :param pts: The indices of the points within the specified radius of the current point. The length of this list
-    is the only real information necessary.
-    :param dd: A list of the distances to the nearest neighbors which align with those in pts.
+    :param pt: The point that density is currently being calculated for
     :param radius: The radius that was specified to be considered for density.
     :param precise: Indicates whether density is reported as number of neighbors (True),
     or as a rougher distance based approximation (False).
     :return: The density of the current point as either the number of nearest neighbors or a distance approximation.
     """
-    if len(pts) <= 0:
+    if precise:
+        dd, nn = kdtree.query(pt, distance_upper_bound=radius, k=10000, workers=-1)
+    else:
+        dd, nn = kdtree.query(pt, distance_upper_bound=radius, k=2, workers=-1)
+    nn = nn.astype('int32')
+    nn = nn[nn != kdtree.n]
+    if len(nn) <= 0:
         return np.nan
     if precise:
-        return len(pts)
+        return len(nn)
     else:
         # use distance to the nearest neighbor as an inverse measure of density
-        if len(pts) < 2:
+        if len(nn) < 2:
             # the closest neighbor should theoretically be the point itself, so check and choose accordingly
             if dd[0] <= 0.01:
                 return 0
@@ -197,38 +163,27 @@ def _compute_den(pts, dd, radius, precise):
             return 1 - (dd[1] / radius)
 
 
-def compute_max_local_height_difference(pc, tree, PPEexec, radius=0.2, k=20):
+def compute_max_local_height_difference(numpts, PPEexec):
     """
     given a 3d point cloud compute the max height difference between the points around every point
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a list of height difference values with the same length as the number of points
     """
-    print("Beginning height diff work")
-    # query tree for nearest neighbors
-    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-    print(f"finished creating args, computing height diff for {len(nn)} points")
-    diffs = list(tqdm(PPEexec.map(_compute_height_diff, pt_groups, chunksize=len(pt_groups) // cpu_count()), total=len(pt_groups)))
+    print(f"Beginning height diff work for {numpts} points")
+    diffs = list(tqdm(PPEexec.map(_compute_height_diff, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts))
     return diffs
 
 
-def _compute_height_diff(pts):
+def _compute_height_diff(pt):
     """
     Helper function that computes the height difference around a single point. Built to work with the map function.
     This function determines the max z difference in an area around a point by getting the difference between
     the min and max z coordinates from the list of points passed.
-    :param pts: a list of indices for points in the data matrix
+    :param pt: The point that height diff is currently being calculated for
     :return: the max height difference found in pts as a foot measurement
     """
+    pts = kdtree.query_ball_point(data[pt], rad)
     if len(pts) < 2:
         return np.nan
     heights = data[pts]
@@ -238,40 +193,28 @@ def _compute_height_diff(pts):
     return abs(hmax - hmin)
 
 
-def compute_verticality(pc, tree, PPEexec, radius=0.2, k=20):
+def compute_verticality(numpts, PPEexec):
     """
     given a 3d point cloud compute the verticality of each point
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a list of verticality values with the same length as the number of points
     """
-    print("Beginning verticality work")
-    # query tree for nearest neighbors
-    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-    print(f"finished creating args, computing verticality for {len(nn)} points")
-    verticality = list(tqdm(PPEexec.map(_compute_vert, pt_groups, chunksize=len(pt_groups) // cpu_count()),
-                            total=len(pt_groups)))
+    print(f"Beginning verticality work for {numpts} points")
+    verticality = list(tqdm(PPEexec.map(_compute_vert, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts))
     return verticality
 
 
-def _compute_vert(pts):
+def _compute_vert(pt):
     '''
     Helper function that computes the verticality of a single point. Built to work with the map function.
     This function determines the verticality of a point by finding the normal of the plane created by the
     surrounding points, then finding the angle between this normal and the positive z-axis (0, 0, 1). Then the angle is
     divided by pi/2 to get a ratio between this normal and the z-axis.
-    :param pts: a list of indices for points in the data matrix
+    :param pt: The point that verticality is currently being calculated for
     :return: the verticality of the point
     '''
+    pts = kdtree.query_ball_point(data[pt], rad)
     if len(pts) < 3:
         return np.nan
     # get the plane of best fit as a point and normal vector
@@ -286,42 +229,26 @@ def _compute_vert(pts):
     return vert
 
 
-def compute_mean_curvature(pc, tree, PPEexec, radius=0.2, k=20):
+def compute_mean_curvature(numpts, PPEexec):
     """
     given a 3d point cloud compute the mean curvature of each point
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a list of mean curvature values with the same length as the number of points
     """
-    print("Beginning mean curvature work")
-    # query tree for nearest neighbors
-    dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    pt_list = []
-    pt_idx = 0
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-        pt_list.append(pt_idx)
-        pt_idx += 1
-    print(f"finished creating args, computing mean curvature for {len(nn)} points")
-    mean_curvature = np.array(list(tqdm(PPEexec.map(_compute_m_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
+    print(f"Beginning mean curvature work for {numpts} points")
+    mean_curvature = np.array(list(tqdm(PPEexec.map(_compute_m_curve, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts)))
     return np.log((mean_curvature - np.nanmin(mean_curvature)) + 1)
 
 
-def _compute_m_curve(pts, current_pt):
+def _compute_m_curve(current_pt):
     '''
     Helper function that computes the mean curvature of the plane surrounding a point by finding the equation of the
     plane of best fit, then finding the partial derivatives needed to compute H
-    :param pts: a list of indices for points in the data matrix
     :param current_pt: the current point (x, y, z)
     :return: the mean curvature of the point
     '''
+    pts = kdtree.query_ball_point(data[current_pt], rad)
     if len(pts) < 6:
         return np.nan
     curve_points = np.array(data[pts])
@@ -339,42 +266,26 @@ def curve_equation(curve_points, c0, c1, c2, c3, c4, c5):
     return (c0 * x ** 2) + (c1 * y ** 2) + (c2 * x * y) + (c3 * x) + (c4 * y) + c5
 
 
-def compute_gaussian_curvature(pc, tree, PPEexec, radius=0.2, k=20):
+def compute_gaussian_curvature(numpts, PPEexec):
     """
     given a 3d point cloud computes the Gaussian curvature of each point
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a list of Gaussian curvature values with the same length as the number of points
     """
-    print("Beginning Gaussian curvature work")
-    # query tree for nearest neighbors
-    dd, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    pt_list = []
-    pt_idx = 0
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-        pt_list.append(pt_idx)
-        pt_idx += 1
-    print(f"finished creating args, computing Gaussian curvature for {len(nn)} points")
-    gauss_curvature = np.array(list(tqdm(PPEexec.map(_compute_g_curve, pt_groups, pt_list, chunksize=len(pt_groups) // cpu_count()), total=len(pt_list))))
+    print(f"Beginning Gaussian curvature work for {numpts} points")
+    gauss_curvature = np.array(list(tqdm(PPEexec.map(_compute_g_curve, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts)))
     return np.log((gauss_curvature - np.nanmin(gauss_curvature)) + 1)
 
 
-def _compute_g_curve(pts, current_pt):
+def _compute_g_curve(current_pt):
     '''
     Helper function that computes the Gaussian curvature of the plane surrounding a point by finding the equation of the
     plane of best fit, then finding the partial derivatives needed to compute K
-    :param pts: a list of indices for points in the data matrix
     :param current_pt: the current point (x, y, z)
     :return: the Gaussian curvature of the point
     '''
+    pts = kdtree.query_ball_point(data[current_pt], rad)
     if len(pts) < 6:
         return np.nan
     curve_points = np.array(data[pts])
@@ -451,29 +362,16 @@ def compute_fundamentals(point, constants):
     return k_values
 
 
-def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
+def compute_geometric(numpts, PPEexec, sf):
     """
     Computes per point eigen features
-    :param pc: a dataframe containing the xyz portion of the pointcloud
-    :param tree: a nearest neighbors tree for all the points
+    :param numpts: the number of points to be processed
     :param PPEexec: a ProcessPoolExecutor for crunching all the numbers in parallel
     :param sf: a list of selected features (ints corresponding to features)
-    :param radius: the radius in which to search for nearest neighbors
-    :param k: the max number of nearest neighbors to query
     :return: a dictionary of computed feature value lists
     """
-    print("Beginning feature work")
-    # query tree for nearest neighbors
-    _, nn = tree.query(pc, distance_upper_bound=radius, k=k, workers=-1)
-    nn = nn.astype('int32')
-    print("determining arg lists...")
-    pt_groups = []
-    for knn in nn:
-        knn = knn[knn != tree.n]
-        pt_groups.append(knn)
-    print(f"finished creating args, computing features for {len(nn)} points")
-    results_arr = np.array(list(tqdm(PPEexec.map(_compute_geo, pt_groups, chunksize=len(pt_groups) // cpu_count()),
-                      total=len(pt_groups))))
+    print(f"Beginning feature work for {numpts} points")
+    results_arr = np.array(list(tqdm(PPEexec.map(_compute_geo, np.arange(numpts), chunksize=numpts // cpu_count()), total=numpts)))
     names = {0: "sum", 1: "omnivariance", 2: "eigenentropy", 3: "anisotropy", 4: "planarity", 5: "linearity", 6: "surface_variation", 7: "sphericity", 8: "verticality"}
     results = {}
     for i in range(len(sf)):
@@ -481,16 +379,17 @@ def compute_geometric(pc, tree, PPEexec, sf, radius=0.2, k=20):
     return results
 
 
-def _compute_geo(pts):
+def _compute_geo(pt):
     """
     a helper function that computes eigen based geometric features for a single point. Determines a covariance matrix
     for the given points and computes the corresponding eigen values and vectors. The properties of the matrix are such
     that there are 3 eigen values and vectors with the values being non-negative. The following feature calculations
     are simple and are taken from the related paper.
-    :param pts: a set of point indices associated with the nearest neighbors
+    :param pt: The point that features are currently being calculated for
     :return: an array of feature values for the point
     """
-    if len(pts) < 4:  # the covariance matrix doesn't work if len(pts) < 3 where 3 represents the number of dimensions
+    pts = kdtree.query_ball_point(data[pt], rad)
+    if len(pts) < 4:  # the covariance matrix doesn't work if len(pts) < 3 where 3 is the number of dimensions
         return np.full(len(selected_features), np.nan)
     # compute covariance matrix
     cov_tensor = np.cov(data[pts], rowvar=False, bias=True)
