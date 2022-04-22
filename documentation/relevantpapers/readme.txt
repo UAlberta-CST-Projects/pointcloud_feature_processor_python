@@ -1,0 +1,2 @@
+These papers are where the math for most of the underlying math for the feature calculations come from. Density and maybe a couple others
+just come from the vague descriptions on the cloudcompare wiki.
