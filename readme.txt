@@ -15,8 +15,6 @@ Windows: After installing from the link above, you should have a new terminal ap
 > conda activate pointcloudenv
 and run the project with either of the usage instructions below.
 
-Note: At present the way work is distributed amongst workers has high memory usage and overhead as a result. This may or may not be resolved later time permitting.
-
 Usages:
 1. (Recommended) You can simply run the compute_features.py file and it will guide you through the process.
 > python compute_features.py
