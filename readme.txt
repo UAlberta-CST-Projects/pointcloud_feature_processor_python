@@ -2,7 +2,7 @@ Requirements:
 Either use the included env file to recreate the conda env, or just install the packages listed in the pip section of the yaml file.
 Also python must be at least version 3.8
 
-Note: You need to run the program from the conda env mentioned above, this can be done either from the command line via conda or through you ide if supported
+Note: You need to run the program from the conda env mentioned above, this can be done either from the command line via conda or through your ide if supported
 
 Requirement install instructions:
 1. If you do not already have anaconda installed on your computer get it here https://www.anaconda.com/products/individual
@@ -11,7 +11,7 @@ Windows: After installing from the link above, you should have a new terminal ap
 2. In your respective anaconda enabled terminal navigate to this project's folder
 3. Create the conda environment with the following command
 > conda env create --file condaenv.yaml
-4. Whenever you want to run the project you must either ensure the environment is activated with 
+4. Whenever you want to run the project you must ensure the environment is activated with 
 > conda activate pointcloudenv
 and run the project with either of the usage instructions below.
 
@@ -42,3 +42,5 @@ To compute zdiff you must specify diffradius.
 You may compute any combination of the three simultaneously if you specify the correct options.
 
 --file must refer to either an absolute path or a relative path from the running directory.
+
+*For implementation and developer details please see the related section in the matlab tutorial document as well as the comments in the code itself.
